@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(grep:*)",
+      "WebSearch",
+      "WebFetch(domain:trading-api.readme.io)",
+      "WebFetch(domain:docs.kalshi.com)",
+      "WebFetch(domain:pypi.org)",
+      "Bash(poetry install:*)",
+      "Bash(pip3 show:*)",
+      "Bash(pip show:*)",
+      "Bash(pip3:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(python3.11:*)",
+      "Bash(python3.12:*)",
+      "Bash(poetry run python3.11:*)",
+      "Bash(poetry run python:*)",
+      "Bash(/Users/monish/.local/bin/poetry --version)",
+      "Bash(pip3.11 list:*)",
+      "Bash(sysctl:*)",
+      "Bash(pip3.11 install:*)",
+      "Bash(arch -arm64 python3.11:*)",
+      "Bash(arch -arm64 pip3.11 install:*)",
+      "Bash(for p in /Users/monish/opt/anaconda3/bin/python3 /Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12)",
+      "Bash(do echo \"=== $p ===\")",
+      "Bash($p -c \"import platform; print\\(platform.machine\\(\\)\\)\")",
+      "Bash(done)",
+      "Bash(arch -arm64 python3.12:*)"
+    ]
+  }
+}

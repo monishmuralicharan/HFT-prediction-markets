@@ -1,0 +1,36 @@
+[Unit]
+Description=Kalshi HFT Trading Bot
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/HFT-prediction-markets
+Environment="PATH=/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Load environment variables
+EnvironmentFile=/home/ubuntu/HFT-prediction-markets/config/secrets.env
+
+# Run the bot
+ExecStart=/home/ubuntu/.local/bin/poetry run python -m src.main
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hft-bot
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

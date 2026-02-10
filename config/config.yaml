@@ -1,0 +1,72 @@
+# Kalshi HFT Bot Configuration
+
+# Trading Strategy
+strategy:
+  entry_threshold: 0.85  # Minimum probability for entry
+  take_profit_pct: 0.02  # 2% profit target
+  stop_loss_pct: 0.01    # 1% stop loss
+  max_hold_time_hours: 2  # Maximum position hold time
+  min_liquidity: 500      # Minimum liquidity at best bid ($)
+  min_volume: 10000       # Minimum 24h volume ($)
+  max_spread_pct: 0.02    # Maximum spread (2%)
+
+# Risk Management
+risk:
+  max_position_size_pct: 0.10  # Max 10% of capital per position
+  max_total_exposure_pct: 0.30  # Max 30% total exposure
+  max_daily_loss_pct: 0.05      # Circuit breaker at -5% daily loss
+  max_consecutive_losses: 5      # Circuit breaker after 5 consecutive losses
+  api_error_threshold: 0.10      # Circuit breaker at 10% API error rate
+  max_disconnect_seconds: 15     # Circuit breaker after 15s WebSocket disconnect
+
+# Position Management
+positions:
+  max_concurrent: 10  # Maximum concurrent positions
+  min_position_size: 50  # Minimum position size ($)
+  max_position_size: 1000  # Maximum position size ($)
+
+# API Configuration (Kalshi)
+api:
+  base_url: "https://api.elections.kalshi.com/trade-api/v2"
+  websocket_url: "wss://api.elections.kalshi.com/trade-api/ws/v2"
+  demo_base_url: "https://demo-api.kalshi.co/trade-api/v2"
+  demo_websocket_url: "wss://demo-api.kalshi.co/trade-api/ws/v2"
+  use_demo: true  # Set to false for production trading
+  read_rate_limit_per_second: 20
+  write_rate_limit_per_second: 10
+  request_timeout: 10
+  max_retries: 3
+  retry_backoff_base: 2
+
+# WebSocket Configuration
+websocket:
+  reconnect_delay_base: 1  # Base delay in seconds
+  max_reconnect_delay: 30  # Maximum delay in seconds
+  ping_interval: 30        # Heartbeat interval
+  ping_timeout: 10         # Heartbeat timeout
+
+# Database Configuration
+database:
+  pool_size: 5
+  max_overflow: 10
+  pool_timeout: 30
+  pool_recycle: 3600
+
+# Logging
+logging:
+  level: INFO
+  format: json
+  log_to_console: true
+  log_to_supabase: true
+
+# Email Alerts
+email:
+  enabled: true
+  rate_limit_minutes: 5  # Minimum time between alert emails
+  send_daily_summary: true
+  daily_summary_hour: 20  # 8 PM UTC
+
+# Monitoring
+monitoring:
+  health_check_port: 8080
+  metrics_enabled: true
