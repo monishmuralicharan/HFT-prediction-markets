@@ -519,7 +519,7 @@ async def handle_fills(
             print(
                 f"  {DIM}{now_str}{RESET}  {GREEN}OPEN{RESET}  {BOLD}{short}{RESET}  "
                 f"@${float(po.order.avg_fill_price):.2f}  size=${float(signal.position_size):.2f}  "
-                f"TP=${float(signal.take_profit_price):.2f}  SL=-5%/60s  "
+                f"TP=${float(signal.take_profit_price):.2f}  SL=-5%/2m  "
                 f"bal=${float(acct.total_balance):.2f}  pnl=${float(acct.daily_pnl):+.2f}"
             )
             state.trade_count += 1
@@ -579,7 +579,7 @@ async def maybe_generate_signal(
 
     # Only buy lines at 85%+ probability
     prob = market.probability if market.probability is not None else market.last_price
-    if prob is None or prob < Decimal("0.85"):
+    if prob is None or prob < Decimal("0.85") or prob > Decimal("0.96"):
         return
 
     signal = strategy.evaluate_market(market, state.account)
@@ -589,6 +589,12 @@ async def maybe_generate_signal(
     if not signal:
         return
 
+    # Size bet: 15 contracts scaled by confidence (e.g. conf=80 → 12 contracts)
+    num_contracts = int(Decimal("15") * signal.confidence / Decimal("100"))
+    if num_contracts < 1:
+        return
+    signal.position_size = Decimal(str(num_contracts)) * signal.entry_price
+
     is_valid, error = risk.validate_signal(signal, state.account, tracker.get_open_count())
 
     if is_valid:
@@ -596,7 +602,7 @@ async def maybe_generate_signal(
         print(
             f"  {DIM}{now_str}{RESET}  {GREEN}SIGNAL{RESET}  {BOLD}{short}{RESET}  "
             f"{signal.strength.value}  conf={float(signal.confidence):.0f}  "
-            f"@${float(signal.entry_price):.2f}  {GREEN}PENDING{RESET}"
+            f"{num_contracts} contracts @${float(signal.entry_price):.2f}  {GREEN}PENDING{RESET}"
         )
     else:
         print(
@@ -627,7 +633,7 @@ async def check_strategy_exits(
             await execution.close_position(position, exit_price, ExitReason(reason_str))
 
 
-SL_TIMEOUT_SECONDS = 60
+SL_TIMEOUT_SECONDS = 120
 SL_LOSS_PCT = Decimal("0.05")
 
 
