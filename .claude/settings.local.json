@@ -26,7 +26,16 @@
       "Bash(do echo \"=== $p ===\")",
       "Bash($p -c \"import platform; print\\(platform.machine\\(\\)\\)\")",
       "Bash(done)",
-      "Bash(arch -arm64 python3.12:*)"
+      "Bash(arch -arm64 python3.12:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:rapidapi.com)",
+      "WebFetch(domain:allsportsapi.com)",
+      "WebFetch(domain:docs.rapidapi.com)",
+      "WebFetch(domain:www.sportdevs.com)",
+      "WebFetch(domain:api-tennis.com)",
+      "WebFetch(domain:sportsapi.com)",
+      "Bash(echo:*)"
     ]
   }
 }

@@ -42,7 +42,7 @@ import base64
 import json
 import time
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
@@ -416,6 +416,8 @@ class LiveTestState:
     market_info: dict  # {ticker: REST market info}
     tickers_data: dict  # {ticker: raw WS ticker payload}
     orderbook: OrderbookState
+    tp_cooldowns: dict = field(default_factory=dict)  # {market_id: {exit_time, exit_price}}
+    sl_reentries: dict = field(default_factory=dict)  # {market_id: {exit_time, exit_price}}
     msg_count: int = 0
     trade_count: int = 0
     connected_at: Optional[float] = None
@@ -553,6 +555,20 @@ async def handle_fills(
             )
             state.trade_count += 1
 
+            # Track TP exits for cooldown before re-entry
+            if exit_reason == ExitReason.TAKE_PROFIT:
+                state.tp_cooldowns[position.market_id] = {
+                    "exit_time": time.time(),
+                    "exit_price": po.order.avg_fill_price,
+                }
+
+            # Track SL exits for potential re-entry after 10s
+            if exit_reason == ExitReason.STOP_LOSS:
+                state.sl_reentries[position.market_id] = {
+                    "exit_time": time.time(),
+                    "exit_price": po.order.avg_fill_price,
+                }
+
         elif fill["type"] == "timeout":
             po = fill["order"]
             ticker_id = po.order.market_id
@@ -577,10 +593,25 @@ async def maybe_generate_signal(
     if execution.has_pending_entry(market.id):
         return
 
-    # Only buy lines at 85%+ probability
+    # Only buy lines at 85-96% probability
     prob = market.probability if market.probability is not None else market.last_price
     if prob is None or prob < Decimal("0.85") or prob > Decimal("0.96"):
         return
+
+    # After a TP exit, wait for: price moves 3% either way OR 60s elapsed
+    cooldown = state.tp_cooldowns.get(market.id)
+    if cooldown:
+        elapsed = time.time() - cooldown["exit_time"]
+        exit_price = cooldown["exit_price"]
+        current_price = market.last_price or market.best_bid or market.best_ask
+        if current_price is not None and exit_price > 0:
+            price_change = abs(current_price - exit_price) / exit_price
+        else:
+            price_change = Decimal("0")
+        if elapsed < 60 and price_change < Decimal("0.03"):
+            return
+        # Cooldown cleared
+        del state.tp_cooldowns[market.id]
 
     signal = strategy.evaluate_market(market, state.account)
     now_str = datetime.now(timezone.utc).strftime("%H:%M:%S")
@@ -590,7 +621,7 @@ async def maybe_generate_signal(
         return
 
     # Size bet: 15 contracts scaled by confidence (e.g. conf=80 → 12 contracts)
-    num_contracts = int(Decimal("15") * signal.confidence / Decimal("100"))
+    num_contracts = int(Decimal("150") * signal.confidence / Decimal("100"))
     if num_contracts < 1:
         return
     signal.position_size = Decimal(str(num_contracts)) * signal.entry_price
@@ -670,6 +701,91 @@ async def check_stop_loss(
             f"  {DIM}{now.strftime('%H:%M:%S')}{RESET}  {YELLOW}STOP LOSS{RESET}  {BOLD}{short}{RESET}  "
             f"({reason})  selling @${float(exit_price):.2f}"
         )
+
+
+async def check_99c_exit(
+    state: LiveTestState,
+    execution: PaperExecutionEngine,
+    tracker: PositionTracker,
+):
+    """Sell any position where the market has hit 99c."""
+    now_str = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    for position in tracker.get_open_positions():
+        market = state.markets.get(position.market_id)
+        if not market:
+            continue
+        current_price = market.last_price or market.best_bid
+        if current_price is None or current_price < Decimal("0.99"):
+            continue
+
+        execution.cancel_other_exit(position.id, "")
+        exit_price = Decimal("0.99")
+        await execution.close_position(position, exit_price, ExitReason.TAKE_PROFIT)
+        short = ticker_short(position.market_id)
+        pnl = exit_price - position.entry_price
+        pnl_color = GREEN if pnl >= 0 else RED
+        print(
+            f"  {DIM}{now_str}{RESET}  {GREEN}EXIT 99c{RESET}  {BOLD}{short}{RESET}  "
+            f"selling @$0.99  entry @${float(position.entry_price):.2f}  "
+            f"{pnl_color}+${float(pnl * position.position_size / position.entry_price):.2f}{RESET}"
+        )
+
+
+async def check_sl_reentry(
+    state: LiveTestState,
+    strategy: StrategyEngine,
+    risk: RiskManager,
+    execution: PaperExecutionEngine,
+    tracker: PositionTracker,
+):
+    """After a stop loss, wait 10s then re-enter if price > exit_price - 3%."""
+    now = time.time()
+    to_remove = []
+    for market_id, info in state.sl_reentries.items():
+        elapsed = now - info["exit_time"]
+        if elapsed < 10:
+            continue
+
+        # Already back in this market
+        if tracker.has_position_for_market(market_id) or execution.has_pending_entry(market_id):
+            to_remove.append(market_id)
+            continue
+
+        market = state.markets.get(market_id)
+        if not market:
+            to_remove.append(market_id)
+            continue
+
+        current_price = market.last_price or market.best_ask
+        if current_price is None:
+            to_remove.append(market_id)
+            continue
+
+        exit_price = info["exit_price"]
+        threshold = exit_price * (Decimal("1") - Decimal("0.03"))
+
+        if current_price >= threshold:
+            # Price held up — re-enter
+            signal = strategy.evaluate_market(market, state.account)
+            if signal:
+                num_contracts = int(Decimal("150") * signal.confidence / Decimal("100"))
+                if num_contracts >= 1:
+                    signal.position_size = Decimal(str(num_contracts)) * signal.entry_price
+                    is_valid, error = risk.validate_signal(signal, state.account, tracker.get_open_count())
+                    if is_valid:
+                        await execution.execute_signal(signal)
+                        short = ticker_short(market_id)
+                        now_str = datetime.now(timezone.utc).strftime("%H:%M:%S")
+                        print(
+                            f"  {DIM}{now_str}{RESET}  {CYAN}RE-ENTRY{RESET}  {BOLD}{short}{RESET}  "
+                            f"post-SL  price=${float(current_price):.2f} > ${float(threshold):.2f}  "
+                            f"{num_contracts} contracts @${float(signal.entry_price):.2f}"
+                        )
+
+        to_remove.append(market_id)
+
+    for mid in to_remove:
+        state.sl_reentries.pop(mid, None)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -840,8 +956,8 @@ async def run(tickers, args):
     take_profit_pct = Decimal(str(args.take_profit or strat_cfg.get("take_profit_pct", 0.03)))
     stop_loss_pct = Decimal(str(args.stop_loss or strat_cfg.get("stop_loss_pct", 0.01)))
     max_hold = args.max_hold or strat_cfg.get("max_hold_time_hours", 2)
-    max_pos_size_pct = Decimal(str(risk_cfg.get("max_position_size_pct", 0.10)))
-    min_pos_size = Decimal(str(pos_cfg.get("min_position_size", 50)))
+    max_pos_size_pct = Decimal("1.0")  # No per-position cap — sizing handled by confidence scaler
+    min_pos_size = Decimal("1")
     max_pos_size = Decimal(str(pos_cfg.get("max_position_size", 1000)))
     balance = Decimal(str(args.balance))
 
@@ -974,7 +1090,9 @@ async def run(tickers, args):
                             await check_strategy_exits(state, strategy, execution, position_tracker)
                             last_exit_check = now
                         if is_paper and now - last_sl_check >= 1.0:
+                            await check_99c_exit(state, execution, position_tracker)
                             await check_stop_loss(state, execution, position_tracker)
+                            await check_sl_reentry(state, strategy, risk_manager, execution, position_tracker)
                             last_sl_check = now
 
                         # Periodic bid/ask log
