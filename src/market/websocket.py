@@ -1,4 +1,5 @@
 """Kalshi WebSocket client with auth headers and auto-reconnect"""
+from __future__ import annotations
 
 import asyncio
 import json

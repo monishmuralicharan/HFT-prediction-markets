@@ -1,7 +1,8 @@
 """Kalshi API request and response models"""
+from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -16,8 +17,8 @@ class OrderBookLevel(BaseModel):
 class OrderBook(BaseModel):
     """Order book data"""
 
-    bids: list[OrderBookLevel]
-    asks: list[OrderBookLevel]
+    bids: List[OrderBookLevel]
+    asks: List[OrderBookLevel]
     timestamp: int
 
 
@@ -26,7 +27,7 @@ class MarketData(BaseModel):
 
     id: str  # Kalshi ticker string (e.g., "KXHIGHNY-25JAN09-B56.5")
     question: str
-    outcomes: list[str] = Field(default_factory=lambda: ["Yes", "No"])
+    outcomes: List[str] = Field(default_factory=lambda: ["Yes", "No"])
     active: bool
     closed: bool
     end_date_iso: str
@@ -120,4 +121,4 @@ class APIError(BaseModel):
 
     code: str
     message: str
-    details: Optional[dict[str, Any]] = None
+    details: Optional[Dict[str, Any]] = None

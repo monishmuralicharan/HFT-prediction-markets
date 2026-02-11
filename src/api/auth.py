@@ -1,4 +1,5 @@
 """Kalshi API authentication using RSA-PSS signing"""
+from __future__ import annotations
 
 import base64
 import time

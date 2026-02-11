@@ -172,8 +172,8 @@ def match_event(parsed: dict, events: list[dict]) -> dict | None:
         if cat_name == target_base:
             score += 2
 
-        # Check date
-        ts = event.get("startTimestamp")
+        # Check date (AllSportsAPI uses startTimestamp, SofaScore uses timestamp)
+        ts = event.get("startTimestamp") or event.get("timestamp")
         if ts:
             event_date = datetime.fromtimestamp(ts, tz=timezone.utc).date()
             if event_date == target_date:

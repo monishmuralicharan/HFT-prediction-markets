@@ -1,9 +1,10 @@
 """Data models for the HFT bot"""
+from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, field_validator
@@ -57,7 +58,7 @@ class Market(BaseModel):
 
     id: str  # Kalshi ticker string
     question: str
-    outcomes: list[str]
+    outcomes: List[str]
     end_date: datetime
     active: bool
     volume_24h: Decimal
@@ -113,7 +114,7 @@ class Order(BaseModel):
     exchange_order_id: Optional[str] = None
 
     # Metadata
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
     def is_filled(self) -> bool:
         """Check if order is fully filled"""
@@ -163,7 +164,7 @@ class Position(BaseModel):
     status: PositionStatus = PositionStatus.OPEN
 
     # Metadata
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("entry_time", "exit_time", mode="before")
     @classmethod
@@ -254,7 +255,7 @@ class Trade(BaseModel):
     status: str
 
     # Metadata
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
     def from_position(cls, position: Position) -> "Trade":
@@ -321,7 +322,7 @@ class AccountSnapshot(BaseModel):
     circuit_breaker_reason: Optional[str] = None
 
     # Metadata
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class Account(BaseModel):

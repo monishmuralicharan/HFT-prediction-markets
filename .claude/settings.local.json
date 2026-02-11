@@ -41,7 +41,21 @@
       "WebFetch(domain:www.getodata.com)",
       "WebFetch(domain:sofascore.helpscoutdocs.com)",
       "WebFetch(domain:forum.betangel.com)",
-      "WebFetch(domain:www.sofascore.com)"
+      "WebFetch(domain:www.sofascore.com)",
+      "WebFetch(domain:flashlive.rapi.one)",
+      "WebFetch(domain:hugeapi.com)",
+      "WebFetch(domain:rapi.one)",
+      "WebFetch(domain:apify.com)",
+      "WebFetch(domain:tommhe14.github.io)",
+      "WebFetch(domain:scraperfc.readthedocs.io)",
+      "WebFetch(domain:nexteventhorizon.substack.com)",
+      "Bash(find . -name \"testing/api-report.md\" -exec cat {} ;)",
+      "WebFetch(domain:help.kalshi.com)",
+      "WebFetch(domain:fiftycentdollars.substack.com)",
+      "WebFetch(domain:kalshi.com)",
+      "Bash(ls:*)",
+      "Bash(/Users/monish/opt/anaconda3/bin/conda env list:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

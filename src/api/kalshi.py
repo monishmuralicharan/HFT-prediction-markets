@@ -1,4 +1,5 @@
 """Kalshi REST API client with dual rate limiting and retry logic"""
+from __future__ import annotations
 
 import asyncio
 import time

@@ -1041,7 +1041,7 @@ async def run(tickers, args):
         while True:
             headers = sign("GET", "/trade-api/ws/v2")
             try:
-                async with websockets.connect(WS_URL, additional_headers=headers, ssl=_SSL_CTX) as ws:
+                async with websockets.connect(WS_URL, extra_headers=headers, ssl=_SSL_CTX) as ws:
                     state.connected_at = time.time()
                     print(f"  {DIM}{datetime.now(timezone.utc).strftime('%H:%M:%S')}{RESET}  {GREEN}connected{RESET}")
 

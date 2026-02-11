@@ -1,4 +1,5 @@
 """Market monitoring and opportunity detection for Kalshi"""
+from __future__ import annotations
 
 import asyncio
 import time
