@@ -212,74 +212,88 @@ def extract_serving(event: dict) -> str:
     return "?"
 
 
-def display_live_dashboard(event: dict, kalshi_ticker: str, client: TennisClient,
-                           prev_score: tuple, started_at: float):
-    """Print a compact live match dashboard (overwrites screen)."""
-    p1 = extract_player_name(event, "homeTeam")
-    p2 = extract_player_name(event, "awayTeam")
-    score = extract_score(event)
-    cur_score = extract_score_raw(event)
-    tournament = extract_tournament(event)
-    status = extract_status(event)
-    serving = extract_serving(event)
-    changed = cur_score != prev_score and prev_score != ()
-
-    elapsed = int(time.time() - started_at)
-    elapsed_str = f"{elapsed // 60}m{elapsed % 60:02d}s"
-    remaining = client.remaining if client.remaining is not None else "?"
-    now_str = time.strftime("%H:%M:%S")
-
-    # Clear screen
-    print("\033[2J\033[H", end="")
-
-    print(f"  {BOLD}{CYAN}{'━' * 64}")
-    print(f"  LIVE  {kalshi_ticker.upper()}")
-    print(f"  {'━' * 64}{RESET}")
-    print()
-    print(f"  {DIM}{tournament}  |  {status}{RESET}")
-    print()
-
-    # Player names + set scores
+def format_sets_compact(event: dict) -> str:
+    """Format set scores as a compact string like [6-4 3-6 5-3]."""
     hs = event.get("homeScore", {})
     aws = event.get("awayScore", {})
-    sets_h = []
-    sets_a = []
+    if not isinstance(hs, dict) or not isinstance(aws, dict):
+        return "[-]"
+    parts = []
     for pk in ["period1", "period2", "period3", "period4", "period5"]:
-        h = hs.get(pk) if isinstance(hs, dict) else None
-        a = aws.get(pk) if isinstance(aws, dict) else None
+        h = hs.get(pk)
+        a = aws.get(pk)
         if h is not None and a is not None:
-            sets_h.append(str(h))
-            sets_a.append(str(a))
+            parts.append(f"{h}-{a}")
+    return "[" + " ".join(parts) + "]" if parts else "[-]"
 
-    point_h = str(hs.get("point", "")) if isinstance(hs, dict) else ""
-    point_a = str(aws.get("point", "")) if isinstance(aws, dict) else ""
 
-    serve1 = "*" if event.get("firstToServe") == 1 else " "
-    serve2 = "*" if event.get("firstToServe") == 2 else " "
+def format_game_score(event: dict) -> str:
+    """Format current game score like '40-15' with serve indicator."""
+    hs = event.get("homeScore", {})
+    aws = event.get("awayScore", {})
+    pt_h = hs.get("point", "") if isinstance(hs, dict) else ""
+    pt_a = aws.get("point", "") if isinstance(aws, dict) else ""
+    if not pt_h and not pt_a:
+        return ""
+    serve = event.get("firstToServe")
+    serve_str = ""
+    if serve == 1:
+        serve_str = "*"
+    elif serve == 2:
+        serve_str = " "
+    # Show as "serve_indicator p1_point-p2_point"
+    return f"{serve_str}{pt_h}-{pt_a}"
 
-    set_cols = "  ".join(f"S{i+1}" for i in range(len(sets_h)))
-    print(f"  {DIM}{'':>22}  {set_cols:}  {'Game':>6}{RESET}")
-    print(f"  {BOLD}{serve1} {p1:>20}{RESET}  {'  '.join(f'{s:>2}' for s in sets_h)}  {GREEN}{point_h:>6}{RESET}")
-    print(f"  {BOLD}{serve2} {p2:>20}{RESET}  {'  '.join(f'{s:>2}' for s in sets_a)}  {RED}{point_a:>6}{RESET}")
-    print()
 
-    # Change indicator
-    if changed:
-        print(f"  {GREEN}{BOLD}  SCORE UPDATED{RESET}")
+def log_poll(event: dict, client: TennisClient, prev_score: tuple,
+             prev_cts: int, started_at: float, poll_num: int) -> tuple:
+    """Print a single log line for a poll result.
+
+    Returns (new_score_tuple, new_changeTimestamp).
+    If the response is stale (changeTimestamp older than what we already saw),
+    the line is tagged STALE and the previous score is preserved.
+    """
+    cts = event.get("changes", {}).get("changeTimestamp", 0)
+    stale = cts < prev_cts and prev_cts > 0
+
+    cur_score = extract_score_raw(event)
+    changed = cur_score != prev_score and prev_score != () and not stale
+
+    now_str = time.strftime("%H:%M:%S")
+    remaining = client.remaining if client.remaining is not None else "?"
+
+    p1 = extract_player_name(event, "homeTeam")
+    p2 = extract_player_name(event, "awayTeam")
+    status = extract_status(event)
+    sets = format_sets_compact(event)
+    game = format_game_score(event)
+    serving = extract_serving(event)
+
+    lag_str = f"{time.time() - cts:.0f}s" if cts else "?"
+
+    if stale:
+        tag = f"{YELLOW}STALE {RESET}"
+    elif changed:
+        tag = f"{GREEN}{BOLD}UPDATE{RESET}"
     else:
-        print(f"  {DIM}  ...waiting for update{RESET}")
-    print()
+        tag = f"{DIM}poll{RESET}  "
 
-    print(f"  {DIM}{'─' * 64}{RESET}")
-    print(f"  {DIM}Time: {now_str}  |  Watching: {elapsed_str}  |  "
-          f"Calls: {client.call_count} (remaining: {remaining}){RESET}")
-    print(f"  {DIM}Ctrl+C to stop{RESET}")
+    print(
+        f"  {DIM}{now_str}{RESET}  {tag}  "
+        f"{BOLD}{p1}{RESET} vs {BOLD}{p2}{RESET}  "
+        f"{CYAN}{sets}{RESET}  {GREEN}{game:>7}{RESET}  "
+        f"{DIM}{status}  serving={serving}  lag={lag_str}  "
+        f"#{poll_num} rem={remaining}{RESET}"
+    )
 
-    return cur_score
+    if stale:
+        # Discard stale data — keep previous score and timestamp
+        return prev_score, prev_cts
+    return cur_score, max(cts, prev_cts)
 
 
-def run_live_dashboard(kalshi_ticker: str, client: TennisClient, interval: int):
-    """Poll a specific match and display a live-updating dashboard."""
+def run_live_poll(kalshi_ticker: str, client: TennisClient, interval: int):
+    """Poll a specific match and print sequential log lines."""
     parsed = parse_kalshi_ticker(kalshi_ticker)
     if not parsed:
         print(f"  {RED}Invalid Kalshi ticker: {kalshi_ticker}{RESET}")
@@ -299,38 +313,45 @@ def run_live_dashboard(kalshi_ticker: str, client: TennisClient, interval: int):
     event_id = matched["id"]
     p1 = extract_player_name(matched, "homeTeam")
     p2 = extract_player_name(matched, "awayTeam")
+    tournament = extract_tournament(matched)
     remaining = client.remaining if client.remaining is not None else "?"
-    print(f"  {GREEN}Matched!{RESET}  {BOLD}{p1} vs {p2}{RESET}  (ID: {event_id})")
-    print(f"  {DIM}Remaining API calls: {remaining}{RESET}")
-    print(f"  {CYAN}Polling every {interval}s — Ctrl+C to stop{RESET}\n")
-    time.sleep(1)
+
+    print(f"  {GREEN}Matched!{RESET}  {BOLD}{p1} vs {p2}{RESET}  "
+          f"{DIM}({tournament}, ID: {event_id}){RESET}")
+    print(f"  {DIM}Polling every {interval}s  |  API calls remaining: {remaining}{RESET}")
+    print(f"  {DIM}Ctrl+C to stop{RESET}")
+    print()
 
     prev_score = ()
+    prev_cts = 0
     started_at = time.time()
+    poll_num = 1
+    effective_interval = max(interval, 1)
 
-    # First display from the data we already have
-    prev_score = display_live_dashboard(matched, kalshi_ticker, client, prev_score, started_at)
+    # First log from the data we already have
+    prev_score, prev_cts = log_poll(matched, client, prev_score, prev_cts, started_at, poll_num)
 
     while True:
-        time.sleep(interval)
+        time.sleep(effective_interval)
+        poll_num += 1
 
-        # Check if we're running low
         if client.remaining is not None and client.remaining <= 5:
-            print(f"\n  {RED}{BOLD}Stopping — only {client.remaining} API calls remaining!{RESET}")
+            print(f"  {RED}{BOLD}Stopping — only {client.remaining} API calls remaining!{RESET}")
             break
 
         try:
             events = client.get_live_matches()
         except Exception as e:
-            print(f"\n  {RED}Fetch error: {e}{RESET}")
+            print(f"  {DIM}{time.strftime('%H:%M:%S')}{RESET}  {RED}error: {e}{RESET}")
             continue
 
         matched = match_event(parsed, events)
         if not matched:
-            print(f"\n  {YELLOW}Match no longer live (finished or not found).{RESET}")
+            print(f"  {DIM}{time.strftime('%H:%M:%S')}{RESET}  "
+                  f"{YELLOW}Match ended or no longer live.{RESET}")
             break
 
-        prev_score = display_live_dashboard(matched, kalshi_ticker, client, prev_score, started_at)
+        prev_score, prev_cts = log_poll(matched, client, prev_score, prev_cts, started_at, poll_num)
 
 
 def main():
@@ -383,7 +404,7 @@ Examples:
 
     try:
         if args.live:
-            run_live_dashboard(args.live, client, args.interval)
+            run_live_poll(args.live, client, args.interval)
 
         elif args.kalshi:
             # Parse Kalshi ticker and auto-match to AllSportsAPI event

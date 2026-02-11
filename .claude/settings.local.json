@@ -35,7 +35,13 @@
       "WebFetch(domain:www.sportdevs.com)",
       "WebFetch(domain:api-tennis.com)",
       "WebFetch(domain:sportsapi.com)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "WebFetch(domain:v2.rapidapi.com)",
+      "WebFetch(domain:www.toolify.ai)",
+      "WebFetch(domain:www.getodata.com)",
+      "WebFetch(domain:sofascore.helpscoutdocs.com)",
+      "WebFetch(domain:forum.betangel.com)",
+      "WebFetch(domain:www.sofascore.com)"
     ]
   }
 }
